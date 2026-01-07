@@ -1,7 +1,6 @@
 #include "movegen.h"
 #include "bitboard.h"
 #include "magic.h"
-#include "neon_opt.h"
 #include <cstring>
 
 struct Board {
@@ -194,55 +193,23 @@ uint64_t perft_t(Board &b, int depth, int ep_sq) {
                     tgt);
 
     U64 p = b.bb[UsO + PAWN];
-    // NEON Pawn Captures
-    // White: ((P & ~FileA) << 7), ((P & ~FileH) << 9)
-    // Black: ((P & ~FileH) >> 7), ((P & ~FileA) >> 9)
-
-    const U64 FileA = 0x0101010101010101ULL;
-    const U64 FileH = 0x8080808080808080ULL;
-
-    U64 m0, m1;
-    int64_t s0, s1;
-
+    // Portable Pawn Captures
+    U64 m0, m1, att0, att1;
     if (Us == WHITE) {
-      m0 = ~FileA;
-      s0 = 7;
-      m1 = ~FileH;
-      s1 = 9;
+      m0 = ~0x0101010101010101ULL; // FileA
+      att0 = (p & m0) << 7;
+      m1 = ~0x8080808080808080ULL; // FileH
+      att1 = (p & m1) << 9;
     } else {
-      m0 = ~FileH;
-      s0 = -7;
-      m1 = ~FileA;
-      s1 = -9;
+      m0 = ~0x8080808080808080ULL; // FileH
+      att0 = (p & m0) >> 7;
+      m1 = ~0x0101010101010101ULL; // FileA
+      att1 = (p & m1) >> 9;
     }
 
-    uint64x2_t v_p = vdupq_n_u64(p);
-    uint64x2_t v_mask = {m0, m1};
-    int64x2_t v_shift = {s0, s1};
-    uint64x2_t v_them = vdupq_n_u64(b.occ[Them] & tgt);
-
-    // (P & Mask)
-    uint64x2_t v_src = vandq_u64(v_p, v_mask);
-    // << Shift
-    uint64x2_t v_att = vshlq_u64(v_src, v_shift);
-    // & Them & Tgt
-    uint64x2_t v_caps = vandq_u64(v_att, v_them);
-
-    // Count
-    // Note: Splitting by Promotion Rank is tricky in vector.
-    // But bulk counting separates Promo logic: `popcnt(c & ~PRo) + popcnt(c &
-    // PRo) * 4`.
-
-    uint64x2_t v_pro = vdupq_n_u64(PRo);
-
-    // Normal Captures: v_caps & ~PRo
-    // vbicq_u64(a, b) -> a & ~b
-    uint64x2_t v_norm = vbicq_u64(v_caps, v_pro);
-    nodes += popcnt128(vreinterpretq_u8_u64(v_norm));
-
-    // Promo Captures: v_caps & PRo
-    uint64x2_t v_pcap = vandq_u64(v_caps, v_pro);
-    nodes += popcnt128(vreinterpretq_u8_u64(v_pcap)) * 4;
+    U64 caps = (att0 | att1) & b.occ[Them] & tgt;
+    nodes += popcnt(caps & ~PRo);
+    nodes += popcnt(caps & PRo) * 4;
 
     if (HasEP) {
       U64 ep_p = pawnAtt[Them][ep_sq] & b.bb[UsO + PAWN];

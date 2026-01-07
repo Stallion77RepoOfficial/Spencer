@@ -1,5 +1,5 @@
 CXX = c++
-CXXFLAGS = -O3 -march=native -std=c++23 -Wall
+CXXFLAGS = -O3 -std=c++23 -Wall
 
 LIB_OBJ = bitboard.o magic.o position.o movegen.o
 

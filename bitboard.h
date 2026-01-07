@@ -4,13 +4,19 @@
 #include "defs.h"
 #include <random>
 
+#ifdef _MSC_VER
+  #include <intrin.h>
+  #define __builtin_popcountll __popcnt64
+  #define __builtin_ctzll _tzcnt_u64
+#endif
+
 inline int poplsb(U64 &b) {
-  int s = __builtin_ctzll(b);
+  int s = (int)__builtin_ctzll(b);
   b &= b - 1;
   return s;
 }
 
-inline int popcnt(U64 b) { return __builtin_popcountll(b); }
+inline int popcnt(U64 b) { return (int)__builtin_popcountll(b); }
 
 extern U64 knightAtt[64];
 extern U64 kingAtt[64];
